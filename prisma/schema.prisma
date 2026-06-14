@@ -1,0 +1,55 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Province {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  cities    City[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model City {
+  id         String   @id @default(cuid())
+  name       String
+  type       String   @default("Kota")
+  postalCode String?
+  provinceId String
+  province   Province @relation(fields: [provinceId], references: [id])
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([name, provinceId])
+}
+
+model Courier {
+  id        String          @id @default(cuid())
+  code      String          @unique
+  name      String
+  logo      String?
+  services  CourierService[]
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+}
+
+model CourierService {
+  id           String        @id @default(cuid())
+  courierId    String
+  courier      Courier       @relation(fields: [courierId], references: [id])
+  serviceCode  String
+  serviceName  String
+  description  String?
+  estimated    String?
+  basePrice    Int           @default(0)
+  pricePerKg   Int           @default(0)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@unique([courierId, serviceCode])
+}
