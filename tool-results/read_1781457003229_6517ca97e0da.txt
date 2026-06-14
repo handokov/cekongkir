@@ -1,0 +1,739 @@
+     1→'use client';
+     2→
+     3→import { useState, useEffect, useRef } from 'react';
+     4→import Link from 'next/link';
+     5→import { useRouter, usePathname } from 'next/navigation';
+     6→import { useStore, type Product } from '@/store/useStore';
+     7→import { Input } from '@/components/ui/input';
+     8→import { Button } from '@/components/ui/button';
+     9→import { Badge } from '@/components/ui/badge';
+    10→import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet';
+    11→import {
+    12→  ShoppingCart,
+    13→  Search,
+    14→  Menu,
+    15→  X,
+    16→  Package,
+    17→  MapPin,
+    18→  MessageCircle,
+    19→  ChevronLeft,
+    20→} from 'lucide-react';
+    21→import { formatRupiah } from '@/lib/format';
+    22→import ProductImage from '@/components/ui/product-image';
+    23→import ShippingCalculator, { type SelectedShipping } from '@/components/shipping/ShippingCalculator';
+    24→
+    25→export default function Header() {
+    26→  const {
+    27→    cartItems,
+    28→    isCartOpen,
+    29→    setIsCartOpen,
+    30→    isMobileMenuOpen,
+    31→    setIsMobileMenuOpen,
+    32→    getCartItemCount,
+    33→  } = useStore();
+    34→
+    35→  const [localSearch, setLocalSearch] = useState('');
+    36→  const [suggestions, setSuggestions] = useState<Product[]>([]);
+    37→  const [showSuggestions, setShowSuggestions] = useState(false);
+    38→  const [isScrolled, setIsScrolled] = useState(false);
+    39→  const searchRef = useRef<HTMLDivElement>(null);
+    40→  const router = useRouter();
+    41→  const pathname = usePathname();
+    42→
+    43→  const cartItemCount = getCartItemCount();
+    44→
+    45→  useEffect(() => {
+    46→    const handleScroll = () => setIsScrolled(window.scrollY > 10);
+    47→    window.addEventListener('scroll', handleScroll);
+    48→    return () => window.removeEventListener('scroll', handleScroll);
+    49→  }, []);
+    50→
+    51→  useEffect(() => {
+    52→    const timeout = setTimeout(async () => {
+    53→      if (localSearch.trim().length >= 2) {
+    54→        try {
+    55→          const res = await fetch(`/api/search?q=${encodeURIComponent(localSearch)}`);
+    56→          const data = await res.json();
+    57→          setSuggestions(data.suggestions);
+    58→          setShowSuggestions(true);
+    59→        } catch {
+    60→          setSuggestions([]);
+    61→        }
+    62→      } else {
+    63→        setSuggestions([]);
+    64→        setShowSuggestions(false);
+    65→      }
+    66→    }, 300);
+    67→    return () => clearTimeout(timeout);
+    68→  }, [localSearch]);
+    69→
+    70→  useEffect(() => {
+    71→    const handleClickOutside = (e: MouseEvent) => {
+    72→      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+    73→        setShowSuggestions(false);
+    74→      }
+    75→    };
+    76→    document.addEventListener('mousedown', handleClickOutside);
+    77→    return () => document.removeEventListener('mousedown', handleClickOutside);
+    78→  }, []);
+    79→
+    80→  const handleSearch = (e: React.FormEvent) => {
+    81→    e.preventDefault();
+    82→    if (localSearch.trim()) {
+    83→      router.push(`/cari?q=${encodeURIComponent(localSearch.trim())}`);
+    84→      setShowSuggestions(false);
+    85→    }
+    86→  };
+    87→
+    88→  const handleSuggestionClick = (product: Product) => {
+    89→    const url = `/${product.categorySlug}/${product.slug}`;
+    90→    router.push(url);
+    91→    setLocalSearch('');
+    92→    setShowSuggestions(false);
+    93→  };
+    94→
+    95→  return (
+    96→    <>
+    97→      {/* Top bar */}
+    98→      <div className="bg-emerald-800 text-white text-xs py-1.5 hidden md:block">
+    99→        <div className="max-w-7xl mx-auto px-4 flex justify-between items-center">
+   100→          <div className="flex items-center gap-4">
+   101→            <span className="flex items-center gap-1">
+   102→              <MapPin className="h-3 w-3" /> Jakarta, Indonesia
+   103→            </span>
+   104→          </div>
+   105→          <div className="flex items-center gap-4">
+   106→            <span>🚚 COD Jakarta Area</span>
+   107→            <span>|</span>
+   108→            <span>👗 Grosir Baju Anak & Baby Kids Terpercaya</span>
+   109→          </div>
+   110→        </div>
+   111→      </div>
+   112→
+   113→      {/* Main header */}
+   114→      <header
+   115→        className={`sticky top-0 z-50 transition-all duration-300 ${
+   116→          isScrolled ? 'bg-white/95 backdrop-blur-md shadow-lg' : 'bg-white shadow-sm'
+   117→        }`}
+   118→      >
+   119→        <div className="max-w-7xl mx-auto px-4">
+   120→          <div className="flex items-center justify-between h-16 gap-4">
+   121→            {/* Logo */}
+   122→            <Link href="/" className="flex items-center gap-2.5 shrink-0 group">
+   123→              <img
+   124→                src="/logo.png"
+   125→                alt="GrosirPJ Logo"
+   126→                className="h-10 w-10 rounded-lg object-contain group-hover:scale-105 transition-transform"
+   127→              />
+   128→              <div className="hidden sm:block">
+   129→                <h1 className="text-xl font-bold text-emerald-900 leading-tight">
+   130→                  GrosirPJ
+   131→                </h1>
+   132→                <p className="text-[11px] text-emerald-700 font-medium leading-tight">
+   133→                  Harga OK Kualitas OK
+   134→                </p>
+   135→              </div>
+   136→            </Link>
+   137→
+   138→            {/* Search */}
+   139→            <div ref={searchRef} className="flex-1 max-w-2xl relative">
+   140→              <form onSubmit={handleSearch} className="relative">
+   141→                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+   142→                <Input
+   143→                  type="text"
+   144→                  placeholder="Cari baju anak, dress bayi, kaos anak..."
+   145→                  value={localSearch}
+   146→                  onChange={(e) => setLocalSearch(e.target.value)}
+   147→                  className="pl-10 pr-4 h-10 bg-gray-50 border-gray-200 focus:bg-white focus:border-emerald-600 focus:ring-emerald-600/20 rounded-full"
+   148→                />
+   149→              </form>
+   150→              {showSuggestions && suggestions.length > 0 && (
+   151→                <div className="absolute top-full mt-1 w-full bg-white rounded-xl shadow-xl border z-50 overflow-hidden">
+   152→                  {suggestions.map((s) => (
+   153→                    <button
+   154→                      key={s.id}
+   155→                      onClick={() => handleSuggestionClick(s)}
+   156→                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-emerald-50 transition-colors text-left"
+   157→                    >
+   158→                      <ProductImage src={s.images} alt={s.name} className="w-10 h-10 rounded-lg object-cover" />
+   159→                      <div className="flex-1 min-w-0">
+   160→                        <p className="text-sm font-medium truncate">{s.name}</p>
+   161→                        <p className="text-xs text-emerald-800 font-semibold">{formatRupiah(s.wholesalePrice)}</p>
+   162→                      </div>
+   163→                    </button>
+   164→                  ))}
+   165→                </div>
+   166→              )}
+   167→            </div>
+   168→
+   169→            {/* Right actions */}
+   170→            <div className="flex items-center gap-2">
+   171→              <Sheet open={isCartOpen} onOpenChange={setIsCartOpen}>
+   172→                <SheetTrigger asChild>
+   173→                  <Button
+   174→                    variant="outline"
+   175→                    size="icon"
+   176→                    className="relative h-10 w-10 rounded-full border-gray-200 hover:bg-emerald-50 hover:border-emerald-400"
+   177→                  >
+   178→                    <ShoppingCart className="h-5 w-5" />
+   179→                    {cartItemCount > 0 && (
+   180→                      <span className="absolute -top-1 -right-1 bg-emerald-700 text-white text-[10px] font-bold rounded-full h-5 w-5 flex items-center justify-center">
+   181→                        {cartItemCount > 99 ? '99+' : cartItemCount}
+   182→                      </span>
+   183→                    )}
+   184→                  </Button>
+   185→                </SheetTrigger>
+   186→                <SheetContent className="w-full sm:w-[420px] p-0">
+   187→                  <SheetTitle className="sr-only">Keranjang Belanja</SheetTitle>
+   188→                  <CartDrawer />
+   189→                </SheetContent>
+   190→              </Sheet>
+   191→
+   192→              <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
+   193→                <SheetTrigger asChild>
+   194→                  <Button variant="ghost" size="icon" className="md:hidden h-10 w-10 rounded-full">
+   195→                    <Menu className="h-5 w-5" />
+   196→                  </Button>
+   197→                </SheetTrigger>
+   198→                <SheetContent side="left" className="w-[300px] p-0">
+   199→                  <SheetTitle className="sr-only">Menu Navigasi</SheetTitle>
+   200→                  <MobileMenu onClose={() => setIsMobileMenuOpen(false)} />
+   201→                </SheetContent>
+   202→              </Sheet>
+   203→            </div>
+   204→          </div>
+   205→        </div>
+   206→
+   207→        {/* Category nav desktop */}
+   208→        <div className="hidden md:block border-t bg-gray-50/50">
+   209→          <div className="max-w-7xl mx-auto px-4">
+   210→            <nav className="flex items-center gap-1 h-10 overflow-x-auto">
+   211→              <Link
+   212→                href="/cari"
+   213→                className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors whitespace-nowrap ${
+   214→                  pathname === '/cari'
+   215→                    ? 'text-emerald-900 bg-emerald-100'
+   216→                    : 'text-gray-600 hover:text-emerald-800 hover:bg-emerald-50'
+   217→                }`}
+   218→              >
+   219→                Semua Kategori
+   220→              </Link>
+   221→              <CategoryNavItems currentPath={pathname} />
+   222→            </nav>
+   223→          </div>
+   224→        </div>
+   225→      </header>
+   226→    </>
+   227→  );
+   228→}
+   229→
+   230→function CategoryNavItems({ currentPath }: { currentPath: string }) {
+   231→  const [categories, setCategories] = useState<import('@/store/useStore').Category[]>([]);
+   232→
+   233→  useEffect(() => {
+   234→    fetch('/api/categories')
+   235→      .then((r) => r.json())
+   236→      .then(setCategories)
+   237→      .catch(() => {});
+   238→  }, []);
+   239→
+   240→  return (
+   241→    <>
+   242→      {categories.map((cat) => (
+   243→        <Link
+   244→          key={cat.id}
+   245→          href={`/${cat.slug}`}
+   246→          className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors whitespace-nowrap ${
+   247→            currentPath === `/${cat.slug}` || currentPath.startsWith(`/${cat.slug}/`)
+   248→              ? 'text-emerald-900 bg-emerald-100'
+   249→              : 'text-gray-600 hover:text-emerald-800 hover:bg-emerald-50'
+   250→          }`}
+   251→        >
+   252→          {cat.name}
+   253→        </Link>
+   254→      ))}
+   255→    </>
+   256→  );
+   257→}
+   258→
+   259→function MobileMenu({ onClose }: { onClose: () => void }) {
+   260→  const [categories, setCategories] = useState<(import('@/store/useStore').Category & { productCount?: number })[]>([]);
+   261→
+   262→  useEffect(() => {
+   263→    fetch('/api/categories')
+   264→      .then((r) => r.json())
+   265→      .then(setCategories)
+   266→      .catch(() => {});
+   267→  }, []);
+   268→
+   269→  return (
+   270→    <div className="flex flex-col h-full">
+   271→      <div className="p-4 bg-gradient-to-r from-emerald-700 to-emerald-900 text-white">
+   272→        <div className="flex items-center gap-2">
+   273→          <img src="/logo.png" alt="GrosirPJ Logo" className="h-10 w-10 rounded-lg object-contain" />
+   274→          <div>
+   275→            <h2 className="text-lg font-bold">GrosirPJ</h2>
+   276→            <p className="text-xs text-emerald-200">Harga OK Kualitas OK</p>
+   277→          </div>
+   278→        </div>
+   279→      </div>
+   280→      <nav className="flex-1 p-2">
+   281→        <Link
+   282→          href="/"
+   283→          onClick={onClose}
+   284→          className="w-full flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-emerald-50 text-gray-700 font-medium"
+   285→        >
+   286→          Beranda
+   287→        </Link>
+   288→        <div className="my-2 border-t" />
+   289→        <p className="px-4 py-2 text-xs font-semibold text-muted-foreground uppercase">Kategori</p>
+   290→        {categories.map((cat) => (
+   291→          <Link
+   292→            key={cat.id}
+   293→            href={`/${cat.slug}`}
+   294→            onClick={onClose}
+   295→            className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg hover:bg-emerald-50 text-gray-700 text-sm"
+   296→          >
+   297→            {cat.name}
+   298→            {cat.productCount !== undefined && (
+   299→              <Badge variant="secondary" className="text-xs">{cat.productCount}</Badge>
+   300→            )}
+   301→          </Link>
+   302→        ))}
+   303→      </nav>
+   304→      <div className="p-4 border-t bg-gray-50">
+   305→        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+   306→          <MapPin className="h-4 w-4" />
+   307→          <span>Jakarta, Indonesia</span>
+   308→        </div>
+   309→      </div>
+   310→    </div>
+   311→  );
+   312→}
+   313→
+   314→function CartDrawer() {
+   315→  const { cartItems, removeFromCart, updateCartQuantity, getCartTotal, clearCart, setIsCartOpen } = useStore();
+   316→  const total = getCartTotal();
+   317→
+   318→  // Step: 'cart' | 'form' | 'invoice'
+   319→  const [step, setStep] = useState<'cart' | 'form' | 'invoice'>('cart');
+   320→  const [isSubmitting, setIsSubmitting] = useState(false);
+   321→  const [invoice, setInvoice] = useState<{
+   322→    orderNumber: string;
+   323→    customerName: string;
+   324→    customerPhone: string;
+   325→    totalAmount: number;
+   326→    shippingCost: number;
+   327→    courier: string;
+   328→    courierService: string;
+   329→    destinationCity: string;
+   330→    items: { name: string; quantity: number; size?: string; price: number }[];
+   331→    createdAt: string;
+   332→  } | null>(null);
+   333→
+   334→  // Customer form
+   335→  const [custName, setCustName] = useState('');
+   336→  const [custPhone, setCustPhone] = useState('');
+   337→  const [custAddr, setCustAddr] = useState('');
+   338→  const [custNote, setCustNote] = useState('');
+   339→  const [shippingCost, setShippingCost] = useState(0);
+   340→  const [selectedShipping, setSelectedShipping] = useState<SelectedShipping | null>(null);
+   341→
+   342→  const WA_NUMBER = '6281281756262';
+   343→  const BCA_REKENING = '4130327970';
+   344→  const grandTotal = total + shippingCost;
+   345→
+   346→  // Calculate total weight from cart items
+   347→  const totalWeight = cartItems.reduce((sum, item) => {
+   348→    const itemWeight = parseInt(item.product.weight || '250') || 250; // default 250g per item
+   349→    return sum + itemWeight * item.quantity;
+   350→  }, 0);
+   351→
+   352→  // Handle shipping selection from ShippingCalculator
+   353→  const handleShippingSelected = (shipping: SelectedShipping | null) => {
+   354→    setSelectedShipping(shipping);
+   355→    setShippingCost(shipping?.cost || 0);
+   356→  };
+   357→
+   358→  const handleSubmitOrder = async () => {
+   359→    if (!custName.trim() || !custPhone.trim()) return;
+   360→    setIsSubmitting(true);
+   361→
+   362→    try {
+   363→      const orderItems = cartItems.map(item => ({
+   364→        productId: item.product.id,
+   365→        quantity: item.quantity,
+   366→        size: item.size || '',
+   367→        price: item.product.wholesalePrice,
+   368→      }));
+   369→
+   370→      const res = await fetch('/api/orders', {
+   371→        method: 'POST',
+   372→        headers: { 'Content-Type': 'application/json' },
+   373→        body: JSON.stringify({
+   374→          customerName: custName.trim(),
+   375→          customerPhone: custPhone.trim(),
+   376→          customerAddr: custAddr.trim(),
+   377→          note: custNote.trim(),
+   378→          shippingCost,
+   379→          courier: selectedShipping?.courier || '',
+   380→          courierService: selectedShipping?.service?.code || '',
+   381→          destinationCity: selectedShipping?.destinationName || '',
+   382→          items: orderItems,
+   383→        }),
+   384→      });
+   385→
+   386→      const data = await res.json();
+   387→      if (!res.ok) throw new Error(data.error || 'Gagal membuat pesanan');
+   388→
+   389→      // Safely extract order data
+   390→      const order = data.order;
+   391→      if (!order || !order.orderNumber) throw new Error('Invalid response from server');
+   392→
+   393→      setInvoice({
+   394→        orderNumber: order.orderNumber || '',
+   395→        customerName: order.customerName || custName.trim(),
+   396→        customerPhone: order.customerPhone || custPhone.trim(),
+   397→        totalAmount: order.totalAmount || 0,
+   398→        shippingCost: order.shippingCost ?? shippingCost,
+   399→        courier: order.courier || selectedShipping?.courier || '',
+   400→        courierService: order.courierService || selectedShipping?.service?.code || '',
+   401→        destinationCity: order.destinationCity || selectedShipping?.destinationName || '',
+   402→        items: Array.isArray(order.items)
+   403→          ? order.items.map((i: Record<string, unknown>) => ({
+   404→              name: (i.product as Record<string, string>)?.name || 'Produk',
+   405→              quantity: (i.quantity as number) || 0,
+   406→              size: (i.size as string) || undefined,
+   407→              price: (i.price as number) || 0,
+   408→            }))
+   409→          : [],
+   410→        createdAt: order.createdAt || new Date().toISOString(),
+   411→      });
+   412→
+   413→      setStep('invoice');
+   414→      clearCart();
+   415→    } catch (err) {
+   416→      console.error('Order error:', err);
+   417→      const errorMsg = err instanceof Error ? err.message : 'Gagal membuat pesanan. Coba lagi.';
+   418→      alert(errorMsg);
+   419→    } finally {
+   420→      setIsSubmitting(false);
+   421→    }
+   422→  };
+   423→
+   424→  const handleWhatsApp = () => {
+   425→    if (!invoice) return;
+   426→
+   427→    let message = `🧾 *INVOICE ${invoice.orderNumber}*\n`;
+   428→    message += 'GrosirPJ - Harga OK Kualitas OK\n';
+   429→    message += '━━━━━━━━━━━━━━━━━━━━━\n\n';
+   430→    message += `👤 ${invoice.customerName}\n`;
+   431→    message += `📱 ${invoice.customerPhone}\n`;
+   432→    if (invoice.destinationCity) message += `📍 ${invoice.destinationCity}\n`;
+   433→    message += '\n';
+   434→    message += '📦 *Detail Pesanan:*\n';
+   435→
+   436→    invoice.items.forEach((item, idx) => {
+   437→      message += `${idx + 1}. ${item.name}\n`;
+   438→      if (item.size) message += `   Ukuran: ${item.size}\n`;
+   439→      message += `   ${item.quantity} x ${formatRupiah(item.price)} = ${formatRupiah(item.price * item.quantity)}\n`;
+   440→    });
+   441→
+   442→    message += '\n━━━━━━━━━━━━━━━━━━━━━\n';
+   443→    message += `📦 Subtotal: ${formatRupiah(invoice.totalAmount)}\n`;
+   444→    if (invoice.courier && invoice.courier !== 'manual') {
+   445→      message += `🚚 Ongkir (${invoice.courier.toUpperCase()} ${invoice.courierService}): ${invoice.shippingCost > 0 ? formatRupiah(invoice.shippingCost) : 'Akan dikonfirmasi'}\n`;
+   446→    } else {
+   447→      message += `🚚 Ongkir: ${invoice.shippingCost > 0 ? formatRupiah(invoice.shippingCost) : 'Akan dikonfirmasi'}\n`;
+   448→    }
+   449→    message += `💰 *TOTAL BAYAR: ${formatRupiah(invoice.totalAmount + invoice.shippingCost)}*\n\n`;
+   450→    message += '💳 *Pembayaran:*\n';
+   451→    message += 'Transfer BCA\n';
+   452→    message += `🏦 ${BCA_REKENING} a.n. Rahmawati\n\n`;
+   453→    message += `Nomor Invoice: *${invoice.orderNumber}*\n\n`;
+   454→    message += 'Mohon kirim bukti transfer dengan menyertakan nomor invoice ini. Terima kasih 🙏';
+   455→
+   456→    window.open(`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
+   457→  };
+   458→
+   459→  const handleClose = () => {
+   460→    setStep('cart');
+   461→    setInvoice(null);
+   462→    setCustName('');
+   463→    setCustPhone('');
+   464→    setCustAddr('');
+   465→    setCustNote('');
+   466→    setShippingCost(0);
+   467→    setSelectedShipping(null);
+   468→    setIsCartOpen(false);
+   469→  };
+   470→
+   471→  return (
+   472→    <div className="flex flex-col h-full">
+   473→      {/* Header */}
+   474→      <div className="p-4 border-b bg-emerald-50">
+   475→        <div className="flex items-center justify-between">
+   476→          <div className="flex items-center gap-2">
+   477→            {step !== 'cart' && (
+   478→              <Button variant="ghost" size="icon" className="h-8 w-8 -ml-2" onClick={() => setStep(step === 'invoice' ? 'form' : 'cart')}>
+   479→                <ChevronLeft className="h-4 w-4" />
+   480→              </Button>
+   481→            )}
+   482→            <h2 className="text-lg font-bold text-emerald-950">
+   483→              {step === 'cart' ? 'Keranjang Belanja' : step === 'form' ? 'Data Pemesan' : 'Invoice'}
+   484→            </h2>
+   485→          </div>
+   486→          <div className="flex items-center gap-2">
+   487→            {step === 'cart' && cartItems.length > 0 && (
+   488→              <Badge variant="secondary" className="bg-emerald-100 text-emerald-900">{cartItems.length} item</Badge>
+   489→            )}
+   490→            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleClose}>
+   491→              <X className="h-4 w-4" />
+   492→            </Button>
+   493→          </div>
+   494→        </div>
+   495→      </div>
+   496→
+   497→      {/* Step: Cart */}
+   498→      {step === 'cart' && (
+   499→        <>
+   500→          {cartItems.length === 0 ? (
+   501→            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+   502→              <ShoppingCart className="h-16 w-16 text-gray-300 mb-4" />
+   503→              <h3 className="font-semibold text-gray-600 mb-1">Keranjang Kosong</h3>
+   504→              <p className="text-sm text-muted-foreground">Mulai belanja fashion anak & baby kids</p>
+   505→            </div>
+   506→          ) : (
+   507→            <>
+   508→              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+   509→                {cartItems.map((item, idx) => (
+   510→                  <div key={`${item.product.id}-${item.size}-${idx}`} className="flex gap-3 p-3 bg-gray-50 rounded-xl">
+   511→                    <ProductImage src={item.product.images} alt={item.product.name} className="w-16 h-16 rounded-lg object-cover" />
+   512→                    <div className="flex-1 min-w-0">
+   513→                      <p className="text-sm font-medium truncate">{item.product.name}</p>
+   514→                      {item.size && <p className="text-xs text-muted-foreground">Ukuran: {item.size}</p>}
+   515→                      <p className="text-sm text-emerald-800 font-semibold">{formatRupiah(item.product.wholesalePrice)}</p>
+   516→                      <div className="flex items-center gap-2 mt-1">
+   517→                        <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => updateCartQuantity(item.product.id, item.quantity - 1, item.size)} disabled={item.quantity <= item.product.minOrder}>-</Button>
+   518→                        <span className="text-sm font-medium w-8 text-center">{item.quantity}</span>
+   519→                        <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => updateCartQuantity(item.product.id, item.quantity + 1, item.size)} disabled={item.quantity >= item.product.stock}>+</Button>
+   520→                        <Button variant="ghost" size="icon" className="h-7 w-7 ml-auto text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => removeFromCart(item.product.id, item.size)}>
+   521→                          <X className="h-4 w-4" />
+   522→                        </Button>
+   523→                      </div>
+   524→                      {item.product.minOrder > 1 && <p className="text-[10px] text-muted-foreground mt-0.5">Min. {item.product.minOrder} pcs</p>}
+   525→                    </div>
+   526→                  </div>
+   527→                ))}
+   528→              </div>
+   529→              <div className="border-t p-4 bg-gray-50">
+   530→                <div className="flex items-center justify-between mb-3">
+   531→                  <span className="text-sm text-muted-foreground">Total</span>
+   532→                  <span className="text-lg font-bold text-emerald-900">{formatRupiah(total)}</span>
+   533→                </div>
+   534→                <Button onClick={() => setStep('form')} className="w-full bg-gradient-to-r from-emerald-700 to-emerald-900 hover:from-emerald-800 hover:to-emerald-950 text-white h-11 rounded-xl font-semibold">
+   535→                  Checkout
+   536→                </Button>
+   537→                <p className="text-xs text-center text-muted-foreground mt-2">Min. order sesuai ketentuan produk</p>
+   538→              </div>
+   539→            </>
+   540→          )}
+   541→        </>
+   542→      )}
+   543→
+   544→      {/* Step: Customer Form */}
+   545→      {step === 'form' && (
+   546→        <>
+   547→          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+   548→            {/* Order summary */}
+   549→            <div className="bg-emerald-50 rounded-xl p-3 mb-2">
+   550→              <p className="text-xs font-semibold text-emerald-900 mb-2">Ringkasan Pesanan</p>
+   551→              {cartItems.map((item, idx) => (
+   552→                <div key={idx} className="flex justify-between text-xs mb-1">
+   553→                  <span className="text-gray-700 truncate flex-1">{item.product.name} x{item.quantity}</span>
+   554→                  <span className="font-medium ml-2">{formatRupiah(item.product.wholesalePrice * item.quantity)}</span>
+   555→                </div>
+   556→              ))}
+   557→              <div className="border-t border-emerald-200 mt-2 pt-2 space-y-1">
+   558→                <div className="flex justify-between text-xs">
+   559→                  <span className="text-emerald-800">Subtotal</span>
+   560→                  <span className="font-medium">{formatRupiah(total)}</span>
+   561→                </div>
+   562→                <div className="flex justify-between text-xs">
+   563→                  <span className="text-emerald-800">Ongkir</span>
+   564→                  <span className="font-medium">{shippingCost > 0 ? formatRupiah(shippingCost) : 'Akan dikonfirmasi'}</span>
+   565→                </div>
+   566→                <div className="flex justify-between pt-1">
+   567→                  <span className="text-sm font-bold text-emerald-900">Total Bayar</span>
+   568→                  <span className="text-sm font-bold text-emerald-900">{formatRupiah(grandTotal)}</span>
+   569→                </div>
+   570→              </div>
+   571→            </div>
+   572→
+   573→            {/* Customer data */}
+   574→            <div>
+   575→              <label className="text-sm font-medium text-gray-700 mb-1 block">Nama Lengkap *</label>
+   576→              <Input
+   577→                placeholder="Masukkan nama Anda"
+   578→                value={custName}
+   579→                onChange={(e) => setCustName(e.target.value)}
+   580→                className="h-10"
+   581→              />
+   582→            </div>
+   583→            <div>
+   584→              <label className="text-sm font-medium text-gray-700 mb-1 block">No. WhatsApp *</label>
+   585→              <Input
+   586→                placeholder="08xxxxxxxxxx"
+   587→                value={custPhone}
+   588→                onChange={(e) => setCustPhone(e.target.value)}
+   589→                className="h-10"
+   590→                type="tel"
+   591→              />
+   592→            </div>
+   593→            <div>
+   594→              <label className="text-sm font-medium text-gray-700 mb-1 block">Alamat Pengiriman</label>
+   595→              <Input
+   596→                placeholder="Alamat lengkap (opsional)"
+   597→                value={custAddr}
+   598→                onChange={(e) => setCustAddr(e.target.value)}
+   599→                className="h-10"
+   600→              />
+   601→            </div>
+   602→
+   603→            {/* Shipping calculator */}
+   604→            <ShippingCalculator
+   605→              totalWeight={totalWeight}
+   606→              onShippingSelected={handleShippingSelected}
+   607→              currentShippingCost={shippingCost}
+   608→            />
+   609→
+   610→            <div>
+   611→              <label className="text-sm font-medium text-gray-700 mb-1 block">Catatan</label>
+   612→              <Input
+   613→                placeholder="Catatan pesanan (opsional)"
+   614→                value={custNote}
+   615→                onChange={(e) => setCustNote(e.target.value)}
+   616→                className="h-10"
+   617→              />
+   618→            </div>
+   619→          </div>
+   620→          <div className="border-t p-4 bg-gray-50">
+   621→            <Button
+   622→              onClick={handleSubmitOrder}
+   623→              disabled={!custName.trim() || !custPhone.trim() || isSubmitting}
+   624→              className="w-full bg-gradient-to-r from-emerald-700 to-emerald-900 hover:from-emerald-800 hover:to-emerald-950 text-white h-11 rounded-xl font-semibold"
+   625→            >
+   626→              {isSubmitting ? 'Memproses...' : 'Buat Invoice'}
+   627→            </Button>
+   628→            <p className="text-xs text-center text-muted-foreground mt-2">Invoice akan digenerate otomatis</p>
+   629→          </div>
+   630→        </>
+   631→      )}
+   632→
+   633→      {/* Step: Invoice */}
+   634→      {step === 'invoice' && invoice && (
+   635→        <>
+   636→          <div className="flex-1 overflow-y-auto p-4">
+   637→            <div className="bg-white border rounded-2xl overflow-hidden shadow-sm">
+   638→              {/* Invoice header */}
+   639→              <div className="bg-gradient-to-r from-emerald-700 to-emerald-900 text-white p-4 text-center">
+   640→                <h3 className="text-lg font-bold">INVOICE</h3>
+   641→                <p className="text-emerald-200 text-sm font-mono">{invoice.orderNumber}</p>
+   642→              </div>
+   643→
+   644→              <div className="p-4 space-y-4">
+   645→                {/* Customer info */}
+   646→                <div className="text-sm">
+   647→                  <p className="text-muted-foreground text-xs">Pemesan</p>
+   648→                  <p className="font-semibold">{invoice.customerName}</p>
+   649→                  <p className="text-muted-foreground">{invoice.customerPhone}</p>
+   650→                  {invoice.destinationCity && (
+   651→                    <p className="text-muted-foreground text-xs mt-0.5">📍 {invoice.destinationCity}</p>
+   652→                  )}
+   653→                </div>
+   654→
+   655→                <div className="border-t" />
+   656→
+   657→                {/* Items */}
+   658→                <div className="space-y-2">
+   659→                  {invoice.items.map((item, idx) => (
+   660→                    <div key={idx} className="flex justify-between text-sm">
+   661→                      <div className="flex-1">
+   662→                        <p className="font-medium">{item.name}</p>
+   663→                        <p className="text-xs text-muted-foreground">
+   664→                          {item.quantity} x {formatRupiah(item.price)}
+   665→                          {item.size ? ` • ${item.size}` : ''}
+   666→                        </p>
+   667→                      </div>
+   668→                      <p className="font-medium">{formatRupiah(item.price * item.quantity)}</p>
+   669→                    </div>
+   670→                  ))}
+   671→                </div>
+   672→
+   673→                <div className="border-t" />
+   674→
+   675→                {/* Subtotal + Ongkir + Total */}
+   676→                <div className="space-y-2">
+   677→                  <div className="flex justify-between text-sm">
+   678→                    <span className="text-gray-600">Subtotal Produk</span>
+   679→                    <span className="font-medium">{formatRupiah(invoice.totalAmount)}</span>
+   680→                  </div>
+   681→                  <div className="flex justify-between text-sm">
+   682→                    <span className="text-gray-600">
+   683→                      Ongkos Kirim
+   684→                      {invoice.courier && invoice.courier !== 'manual' && (
+   685→                        <span className="text-xs text-gray-400 ml-1">
+   686→                          ({invoice.courier.toUpperCase()} {invoice.courierService})
+   687→                        </span>
+   688→                      )}
+   689→                    </span>
+   690→                    <span className="font-medium">{invoice.shippingCost > 0 ? formatRupiah(invoice.shippingCost) : 'Akan dikonfirmasi'}</span>
+   691→                  </div>
+   692→                  <div className="border-t pt-2 flex justify-between items-center">
+   693→                    <span className="font-bold text-gray-900">TOTAL BAYAR</span>
+   694→                    <span className="text-xl font-bold text-emerald-900">{formatRupiah(invoice.totalAmount + invoice.shippingCost)}</span>
+   695→                  </div>
+   696→                </div>
+   697→
+   698→                <div className="border-t" />
+   699→
+   700→                {/* Payment info */}
+   701→                <div className="bg-blue-50 rounded-xl p-3">
+   702→                  <p className="font-semibold text-blue-900 text-sm mb-2">💳 Pembayaran Transfer BCA</p>
+   703→                  <div className="bg-white rounded-lg p-3 text-center">
+   704→                    <p className="text-xs text-muted-foreground">Nomor Rekening</p>
+   705→                    <p className="text-2xl font-bold font-mono text-blue-900 tracking-wider">{BCA_REKENING}</p>
+   706→                    <p className="text-sm text-muted-foreground">a.n. Rahmawati</p>
+   707→                  </div>
+   708→                  <p className="text-xs text-blue-800 mt-2">
+   709→                    ⚠️ Harap sertakan <b>nomor invoice {invoice.orderNumber}</b> saat kirim bukti transfer
+   710→                  </p>
+   711→                </div>
+   712→
+   713→                {/* Status */}
+   714→                <div className="flex items-center gap-2 bg-yellow-50 rounded-lg p-2">
+   715→                  <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
+   716→                  <span className="text-xs font-medium text-yellow-800">Menunggu Pembayaran</span>
+   717→                </div>
+   718→
+   719→                <p className="text-[10px] text-muted-foreground text-center">
+   720→                  {new Date(invoice.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })} {new Date(invoice.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+   721→                </p>
+   722→              </div>
+   723→            </div>
+   724→          </div>
+   725→          <div className="border-t p-4 bg-gray-50 space-y-2">
+   726→            <Button
+   727→              onClick={handleWhatsApp}
+   728→              className="w-full bg-[#25D366] hover:bg-[#20BD5A] text-white h-11 rounded-xl font-semibold"
+   729→            >
+   730→              <MessageCircle className="h-4 w-4 mr-2" /> Kirim Bukti Bayar via WhatsApp
+   731→            </Button>
+   732→            <p className="text-xs text-center text-muted-foreground">Sertakan nomor invoice & bukti transfer</p>
+   733→          </div>
+   734→        </>
+   735→      )}
+   736→    </div>
+   737→  );
+   738→}
+   739→
