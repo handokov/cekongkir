@@ -1,0 +1,766 @@
+     1→'use client'
+     2→
+     3→import { useState, useEffect, useRef, useCallback } from 'react'
+     4→import { Button } from '@/components/ui/button'
+     5→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+     6→import { Input } from '@/components/ui/input'
+     7→import { Label } from '@/components/ui/label'
+     8→import { Badge } from '@/components/ui/badge'
+     9→import { Separator } from '@/components/ui/separator'
+    10→import { Checkbox } from '@/components/ui/checkbox'
+    11→import { ScrollArea } from '@/components/ui/scroll-area'
+    12→import { Skeleton } from '@/components/ui/skeleton'
+    13→import {
+    14→  Package,
+    15→  MapPin,
+    16→  Weight,
+    17→  Truck,
+    18→  Search,
+    19→  ArrowRightLeft,
+    20→  ChevronDown,
+    21→  X,
+    22→  Loader2,
+    23→  Clock,
+    24→  CircleDollarSign,
+    25→  Route,
+    26→  AlertCircle,
+    27→  CheckCircle2,
+    28→  Zap,
+    29→  Ship,
+    30→  Plane,
+    31→} from 'lucide-react'
+    32→import { useToast } from '@/hooks/use-toast'
+    33→
+    34→// Types
+    35→interface City {
+    36→  id: string
+    37→  name: string
+    38→  type: string
+    39→  province: string
+    40→  label: string
+    41→}
+    42→
+    43→interface Courier {
+    44→  id: string
+    45→  code: string
+    46→  name: string
+    47→  services: CourierService[]
+    48→}
+    49→
+    50→interface CourierService {
+    51→  id: string
+    52→  serviceCode: string
+    53→  serviceName: string
+    54→  description: string | null
+    55→  estimated: string | null
+    56→  basePrice: number
+    57→  pricePerKg: number
+    58→}
+    59→
+    60→interface CostService {
+    61→  serviceCode: string
+    62→  serviceName: string
+    63→  description: string | null
+    64→  estimated: string | null
+    65→  cost: number
+    66→}
+    67→
+    68→interface CostResult {
+    69→  courier: { code: string; name: string }
+    70→  services: CostService[]
+    71→}
+    72→
+    73→interface CostResponse {
+    74→  origin: { city: string; type: string; province: string }
+    75→  destination: { city: string; type: string; province: string }
+    76→  weight: number
+    77→  distanceMultiplier: number
+    78→  results: CostResult[]
+    79→}
+    80→
+    81→// City Search Dropdown Component
+    82→function CitySelector({
+    83→  label,
+    84→  placeholder,
+    85→  selectedCity,
+    86→  onSelect,
+    87→}: {
+    88→  label: string
+    89→  placeholder: string
+    90→  selectedCity: City | null
+    91→  onSelect: (city: City | null) => void
+    92→}) {
+    93→  const [search, setSearch] = useState('')
+    94→  const [cities, setCities] = useState<City[]>([])
+    95→  const [isOpen, setIsOpen] = useState(false)
+    96→  const [loading, setLoading] = useState(false)
+    97→  const containerRef = useRef<HTMLDivElement>(null)
+    98→  const inputRef = useRef<HTMLInputElement>(null)
+    99→  const debounceRef = useRef<NodeJS.Timeout | null>(null)
+   100→
+   101→  useEffect(() => {
+   102→    function handleClickOutside(event: MouseEvent) {
+   103→      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+   104→        setIsOpen(false)
+   105→      }
+   106→    }
+   107→    document.addEventListener('mousedown', handleClickOutside)
+   108→    return () => document.removeEventListener('mousedown', handleClickOutside)
+   109→  }, [])
+   110→
+   111→  const searchCities = useCallback(async (query: string) => {
+   112→    if (query.length < 2) {
+   113→      setCities([])
+   114→      return
+   115→    }
+   116→    setLoading(true)
+   117→    try {
+   118→      const res = await fetch(`/api/city?search=${encodeURIComponent(query)}`)
+   119→      const data = await res.json()
+   120→      if (data.status === 'ok') {
+   121→        setCities(data.data.slice(0, 50))
+   122→      }
+   123→    } catch {
+   124→      setCities([])
+   125→    } finally {
+   126→      setLoading(false)
+   127→    }
+   128→  }, [])
+   129→
+   130→  const handleInputChange = (value: string) => {
+   131→    setSearch(value)
+   132→    if (selectedCity) {
+   133→      onSelect(null)
+   134→    }
+   135→    if (debounceRef.current) clearTimeout(debounceRef.current)
+   136→    debounceRef.current = setTimeout(() => searchCities(value), 300)
+   137→  }
+   138→
+   139→  const handleSelect = (city: City) => {
+   140→    onSelect(city)
+   141→    setSearch('')
+   142→    setIsOpen(false)
+   143→  }
+   144→
+   145→  const handleClear = () => {
+   146→    onSelect(null)
+   147→    setSearch('')
+   148→    setCities([])
+   149→  }
+   150→
+   151→  const handleOpen = () => {
+   152→    setIsOpen(true)
+   153→    setTimeout(() => inputRef.current?.focus(), 50)
+   154→  }
+   155→
+   156→  return (
+   157→    <div className="space-y-2" ref={containerRef}>
+   158→      <Label className="text-sm font-medium text-foreground flex items-center gap-2">
+   159→        <MapPin className="h-4 w-4 text-emerald-500" />
+   160→        {label}
+   161→      </Label>
+   162→      <div className="relative">
+   163→        {selectedCity ? (
+   164→          <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 dark:border-emerald-800 dark:bg-emerald-950">
+   165→            <div className="flex items-center gap-2 min-w-0">
+   166→              <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+   167→              <span className="text-sm font-medium text-emerald-800 dark:text-emerald-200 truncate">
+   168→                {selectedCity.label}
+   169→              </span>
+   170→            </div>
+   171→            <Button
+   172→              variant="ghost"
+   173→              size="sm"
+   174→              className="h-6 w-6 p-0 shrink-0 hover:bg-emerald-100 dark:hover:bg-emerald-900"
+   175→              onClick={handleClear}
+   176→            >
+   177→              <X className="h-3.5 w-3.5" />
+   178→            </Button>
+   179→          </div>
+   180→        ) : (
+   181→          <div
+   182→            className="flex items-center rounded-lg border border-input bg-background cursor-text"
+   183→            onClick={handleOpen}
+   184→          >
+   185→            <Input
+   186→              ref={inputRef}
+   187→              placeholder={placeholder}
+   188→              value={search}
+   189→              onChange={(e) => handleInputChange(e.target.value)}
+   190→              onFocus={() => setIsOpen(true)}
+   191→              className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 text-sm"
+   192→            />
+   193→            <ChevronDown className="h-4 w-4 mr-3 text-muted-foreground shrink-0" />
+   194→          </div>
+   195→        )}
+   196→
+   197→        {isOpen && !selectedCity && (
+   198→          <div className="absolute z-50 mt-1 w-full rounded-lg border border-border bg-popover shadow-lg">
+   199→            <ScrollArea className="max-h-64">
+   200→              {loading ? (
+   201→                <div className="p-4 space-y-2">
+   202→                  <Skeleton className="h-4 w-full" />
+   203→                  <Skeleton className="h-4 w-3/4" />
+   204→                  <Skeleton className="h-4 w-1/2" />
+   205→                </div>
+   206→              ) : cities.length > 0 ? (
+   207→                <div className="py-1">
+   208→                  {cities.map((city) => (
+   209→                    <button
+   210→                      key={city.id}
+   211→                      className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
+   212→                      onClick={() => handleSelect(city)}
+   213→                    >
+   214→                      <span className="font-medium">{city.type} {city.name}</span>
+   215→                      <span className="text-muted-foreground">, {city.province}</span>
+   216→                    </button>
+   217→                  ))}
+   218→                </div>
+   219→              ) : search.length >= 2 ? (
+   220→                <div className="p-4 text-center text-sm text-muted-foreground">
+   221→                  Kota tidak ditemukan
+   222→                </div>
+   223→              ) : (
+   224→                <div className="p-4 text-center text-sm text-muted-foreground">
+   225→                  Ketik minimal 2 huruf untuk mencari kota
+   226→                </div>
+   227→              )}
+   228→            </ScrollArea>
+   229→          </div>
+   230→        )}
+   231→      </div>
+   232→    </div>
+   233→  )
+   234→}
+   235→
+   236→// Courier Icon Mapping
+   237→function getCourierIcon(code: string) {
+   238→  switch (code) {
+   239→    case 'gosend':
+   240→    case 'grab':
+   241→      return <Zap className="h-5 w-5" />
+   242→    case 'lion':
+   243→      return <Plane className="h-5 w-5" />
+   244→    case 'jne':
+   245→    case 'tiki':
+   246→    case 'pos':
+   247→    case 'jnt':
+   248→    case 'sicepat':
+   249→    case 'anteraja':
+   250→    case 'wahana':
+   251→    case 'ninja':
+   252→    default:
+   253→      return <Ship className="h-5 w-5" />
+   254→  }
+   255→}
+   256→
+   257→function getCourierColor(code: string) {
+   258→  const colors: Record<string, string> = {
+   259→    jne: 'bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-950 dark:text-orange-300 dark:border-orange-800',
+   260→    tiki: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800',
+   261→    pos: 'bg-red-100 text-red-600 border-red-200 dark:bg-red-950 dark:text-red-400 dark:border-red-800',
+   262→    jnt: 'bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-950 dark:text-yellow-300 dark:border-yellow-800',
+   263→    sicepat: 'bg-sky-100 text-sky-700 border-sky-200 dark:bg-sky-950 dark:text-sky-300 dark:border-sky-800',
+   264→    anteraja: 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-800',
+   265→    wahana: 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800',
+   266→    ninja: 'bg-teal-100 text-teal-700 border-teal-200 dark:bg-teal-950 dark:text-teal-300 dark:border-teal-800',
+   267→    lion: 'bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-950 dark:text-rose-300 dark:border-rose-800',
+   268→    gosend: 'bg-green-100 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300 dark:border-green-800',
+   269→    grab: 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800',
+   270→  }
+   271→  return colors[code] || 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700'
+   272→}
+   273→
+   274→// Format currency to Rupiah
+   275→function formatRupiah(amount: number): string {
+   276→  return new Intl.NumberFormat('id-ID', {
+   277→    style: 'currency',
+   278→    currency: 'IDR',
+   279→    minimumFractionDigits: 0,
+   280→    maximumFractionDigits: 0,
+   281→  }).format(amount)
+   282→}
+   283→
+   284→// Main Page
+   285→export default function Home() {
+   286→  const { toast } = useToast()
+   287→  const [originCity, setOriginCity] = useState<City | null>(null)
+   288→  const [destCity, setDestCity] = useState<City | null>(null)
+   289→  const [weight, setWeight] = useState<string>('1000')
+   290→  const [couriers, setCouriers] = useState<Courier[]>([])
+   291→  const [selectedCouriers, setSelectedCouriers] = useState<string[]>([])
+   292→  const [loadingCouriers, setLoadingCouriers] = useState(true)
+   293→  const [calculating, setCalculating] = useState(false)
+   294→  const [costResult, setCostResult] = useState<CostResponse | null>(null)
+   295→  const [sortBy, setSortBy] = useState<'price' | 'speed'>('price')
+   296→
+   297→  // Load couriers on mount
+   298→  useEffect(() => {
+   299→    async function loadCouriers() {
+   300→      try {
+   301→        const res = await fetch('/api/courier')
+   302→        const data = await res.json()
+   303→        if (data.status === 'ok') {
+   304→          setCouriers(data.data)
+   305→          // Select popular couriers by default
+   306→          const defaultCouriers = ['jne', 'jnt', 'sicepat', 'tiki', 'pos']
+   307→          const availableCodes = data.data.map((c: Courier) => c.code)
+   308→          setSelectedCouriers(defaultCouriers.filter(c => availableCodes.includes(c)))
+   309→        }
+   310→      } catch {
+   311→        toast({ title: 'Gagal memuat data kurir', variant: 'destructive' })
+   312→      } finally {
+   313→        setLoadingCouriers(false)
+   314→      }
+   315→    }
+   316→    loadCouriers()
+   317→  }, [toast])
+   318→
+   319→  const toggleCourier = (code: string) => {
+   320→    setSelectedCouriers(prev =>
+   321→      prev.includes(code)
+   322→        ? prev.filter(c => c !== code)
+   323→        : [...prev, code]
+   324→    )
+   325→  }
+   326→
+   327→  const handleSwap = () => {
+   328→    const temp = originCity
+   329→    setOriginCity(destCity)
+   330→    setDestCity(temp)
+   331→  }
+   332→
+   333→  const handleCheckCost = async () => {
+   334→    if (!originCity) {
+   335→      toast({ title: 'Pilih kota asal terlebih dahulu', variant: 'destructive' })
+   336→      return
+   337→    }
+   338→    if (!destCity) {
+   339→      toast({ title: 'Pilih kota tujuan terlebih dahulu', variant: 'destructive' })
+   340→      return
+   341→    }
+   342→    if (originCity.id === destCity.id) {
+   343→      toast({ title: 'Kota asal dan tujuan tidak boleh sama', variant: 'destructive' })
+   344→      return
+   345→    }
+   346→    const weightNum = parseInt(weight)
+   347→    if (!weightNum || weightNum < 1) {
+   348→      toast({ title: 'Masukkan berat paket yang valid (minimal 1 gram)', variant: 'destructive' })
+   349→      return
+   350→    }
+   351→    if (selectedCouriers.length === 0) {
+   352→      toast({ title: 'Pilih minimal satu kurir', variant: 'destructive' })
+   353→      return
+   354→    }
+   355→
+   356→    setCalculating(true)
+   357→    setCostResult(null)
+   358→
+   359→    try {
+   360→      const res = await fetch('/api/cost', {
+   361→        method: 'POST',
+   362→        headers: { 'Content-Type': 'application/json' },
+   363→        body: JSON.stringify({
+   364→          originCityId: originCity.id,
+   365→          destinationCityId: destCity.id,
+   366→          weight: weightNum,
+   367→          courierCodes: selectedCouriers,
+   368→        }),
+   369→      })
+   370→      const data = await res.json()
+   371→      if (data.status === 'ok') {
+   372→        setCostResult(data.data)
+   373→        toast({ title: 'Ongkir berhasil dihitung!', description: `Ditemukan ${data.data.results.length} kurir dengan berbagai layanan` })
+   374→      } else {
+   375→        toast({ title: data.message || 'Gagal menghitung ongkir', variant: 'destructive' })
+   376→      }
+   377→    } catch {
+   378→      toast({ title: 'Terjadi kesalahan saat menghitung ongkir', variant: 'destructive' })
+   379→    } finally {
+   380→      setCalculating(false)
+   381→    }
+   382→  }
+   383→
+   384→  // Sort services
+   385→  const getSortedResults = () => {
+   386→    if (!costResult) return []
+   387→    const sorted = [...costResult.results]
+   388→    return sorted.map(result => {
+   389→      const services = [...result.services]
+   390→      if (sortBy === 'price') {
+   391→        services.sort((a, b) => a.cost - b.cost)
+   392→      } else {
+   393→        // Sort by estimated delivery speed
+   394→        services.sort((a, b) => {
+   395→          const getDays = (est: string | null) => {
+   396→            if (!est) return 99
+   397→            if (est.toLowerCase().includes('same day') || est.toLowerCase().includes('jam')) return 0
+   398→            if (est.toLowerCase().includes('1 hari')) return 1
+   399→            const match = est.match(/(\d+)-?(\d+)?\s*hari/)
+   400→            if (match) return parseInt(match[1])
+   401→            return 99
+   402→          }
+   403→          return getDays(a.estimated) - getDays(b.estimated)
+   404→        })
+   405→      }
+   406→      return { ...result, services }
+   407→    })
+   408→  }
+   409→
+   410→  // Find cheapest and fastest across all results
+   411→  const allServices = costResult?.results.flatMap(r =>
+   412→    r.services.map(s => ({ ...s, courierCode: r.courier.code, courierName: r.courier.name }))
+   413→  ) || []
+   414→
+   415→  const cheapestService = allServices.length > 0
+   416→    ? allServices.reduce((min, s) => s.cost < min.cost ? s : min, allServices[0])
+   417→    : null
+   418→
+   419→  return (
+   420→    <div className="min-h-screen flex flex-col bg-gradient-to-br from-emerald-50 via-white to-teal-50 dark:from-gray-950 dark:via-gray-900 dark:to-emerald-950">
+   421→      {/* Header */}
+   422→      <header className="border-b border-border bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm sticky top-0 z-40">
+   423→        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+   424→          <div className="flex items-center gap-3">
+   425→            <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-md">
+   426→              <Truck className="h-5 w-5 text-white" />
+   427→            </div>
+   428→            <div>
+   429→              <h1 className="text-lg font-bold text-foreground leading-tight">CekOngkir</h1>
+   430→              <p className="text-[11px] text-muted-foreground leading-tight">Cek ongkos kirim semua ekspedisi</p>
+   431→            </div>
+   432→          </div>
+   433→          <Badge variant="secondary" className="text-xs font-normal hidden sm:flex">
+   434→            11 Ekspedisi Tersedia
+   435→          </Badge>
+   436→        </div>
+   437→      </header>
+   438→
+   439→      <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-6 space-y-6">
+   440→        {/* Hero Section */}
+   441→        <div className="text-center space-y-2 py-4">
+   442→          <h2 className="text-2xl sm:text-3xl font-bold text-foreground">
+   443→            Cek Ongkos Kirim <span className="text-emerald-600 dark:text-emerald-400">Termurah</span>
+   444→          </h2>
+   445→          <p className="text-muted-foreground text-sm sm:text-base max-w-xl mx-auto">
+   446→            Bandingkan tarif pengiriman dari berbagai ekspedisi Indonesia. Cepat, mudah, dan gratis!
+   447→          </p>
+   448→        </div>
+   449→
+   450→        {/* Search Form Card */}
+   451→        <Card className="border-border shadow-md overflow-hidden">
+   452→          <CardHeader className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white pb-4">
+   453→            <CardTitle className="flex items-center gap-2 text-base font-semibold">
+   454→              <Route className="h-5 w-5" />
+   455→              Form Pengecekan Ongkir
+   456→            </CardTitle>
+   457→          </CardHeader>
+   458→          <CardContent className="p-4 sm:p-6 space-y-5">
+   459→            {/* Origin & Destination */}
+   460→            <div className="grid grid-cols-1 sm:grid-cols-[1fr,auto,1fr] gap-3 sm:gap-4 items-end">
+   461→              <CitySelector
+   462→                label="Kota Asal"
+   463→                placeholder="Cari kota asal..."
+   464→                selectedCity={originCity}
+   465→                onSelect={setOriginCity}
+   466→              />
+   467→              <div className="flex justify-center sm:pb-0.5">
+   468→                <Button
+   469→                  variant="outline"
+   470→                  size="icon"
+   471→                  className="h-9 w-9 rounded-full border-emerald-200 hover:bg-emerald-50 hover:border-emerald-300 dark:border-emerald-800 dark:hover:bg-emerald-950"
+   472→                  onClick={handleSwap}
+   473→                  title="Tukar kota asal & tujuan"
+   474→                >
+   475→                  <ArrowRightLeft className="h-4 w-4 text-emerald-600" />
+   476→                </Button>
+   477→              </div>
+   478→              <CitySelector
+   479→                label="Kota Tujuan"
+   480→                placeholder="Cari kota tujuan..."
+   481→                selectedCity={destCity}
+   482→                onSelect={setDestCity}
+   483→              />
+   484→            </div>
+   485→
+   486→            {/* Weight */}
+   487→            <div className="space-y-2">
+   488→              <Label className="text-sm font-medium text-foreground flex items-center gap-2">
+   489→                <Weight className="h-4 w-4 text-emerald-500" />
+   490→                Berat Paket
+   491→              </Label>
+   492→              <div className="flex items-center gap-3">
+   493→                <div className="relative flex-1 max-w-xs">
+   494→                  <Input
+   495→                    type="number"
+   496→                    min="1"
+   497→                    value={weight}
+   498→                    onChange={(e) => setWeight(e.target.value)}
+   499→                    className="pr-14 text-sm"
+   500→                    placeholder="1000"
+   501→                  />
+   502→                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">gram</span>
+   503→                </div>
+   504→                <div className="flex gap-1.5">
+   505→                  {[{ label: '100g', val: '100' }, { label: '500g', val: '500' }, { label: '1kg', val: '1000' }, { label: '5kg', val: '5000' }, { label: '10kg', val: '10000' }].map(preset => (
+   506→                    <Button
+   507→                      key={preset.val}
+   508→                      variant={weight === preset.val ? 'default' : 'outline'}
+   509→                      size="sm"
+   510→                      className={`text-xs h-7 px-2 ${weight === preset.val ? 'bg-emerald-600 hover:bg-emerald-700' : ''}`}
+   511→                      onClick={() => setWeight(preset.val)}
+   512→                    >
+   513→                      {preset.label}
+   514→                    </Button>
+   515→                  ))}
+   516→                </div>
+   517→              </div>
+   518→            </div>
+   519→
+   520→            {/* Courier Selection */}
+   521→            <div className="space-y-3">
+   522→              <div className="flex items-center justify-between">
+   523→                <Label className="text-sm font-medium text-foreground flex items-center gap-2">
+   524→                  <Package className="h-4 w-4 text-emerald-500" />
+   525→                  Pilih Kurir
+   526→                </Label>
+   527→                <div className="flex gap-2">
+   528→                  <Button
+   529→                    variant="ghost"
+   530→                    size="sm"
+   531→                    className="text-xs h-7 text-emerald-600 hover:text-emerald-700"
+   532→                    onClick={() => setSelectedCouriers(couriers.map(c => c.code))}
+   533→                  >
+   534→                    Pilih Semua
+   535→                  </Button>
+   536→                  <Button
+   537→                    variant="ghost"
+   538→                    size="sm"
+   539→                    className="text-xs h-7 text-muted-foreground"
+   540→                    onClick={() => setSelectedCouriers([])}
+   541→                  >
+   542→                    Hapus Semua
+   543→                  </Button>
+   544→                </div>
+   545→              </div>
+   546→              {loadingCouriers ? (
+   547→                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+   548→                  {Array.from({ length: 8 }).map((_, i) => (
+   549→                    <Skeleton key={i} className="h-12 rounded-lg" />
+   550→                  ))}
+   551→                </div>
+   552→              ) : (
+   553→                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+   554→                  {couriers.map((courier) => (
+   555→                    <div
+   556→                      key={courier.id}
+   557→                      role="button"
+   558→                      tabIndex={0}
+   559→                      className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left transition-all text-sm cursor-pointer ${
+   560→                        selectedCouriers.includes(courier.code)
+   561→                          ? getCourierColor(courier.code) + ' border shadow-sm'
+   562→                          : 'border-border bg-background hover:bg-accent'
+   563→                      }`}
+   564→                      onClick={() => toggleCourier(courier.code)}
+   565→                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleCourier(courier.code) } }}
+   566→                    >
+   567→                      <Checkbox
+   568→                        checked={selectedCouriers.includes(courier.code)}
+   569→                        className="pointer-events-none"
+   570→                      />
+   571→                      <div className="min-w-0">
+   572→                        <span className="font-medium text-xs truncate block">
+   573→                          {courier.code.toUpperCase()}
+   574→                        </span>
+   575→                        <span className="text-[10px] opacity-70 truncate block">
+   576→                          {courier.services.length} layanan
+   577→                        </span>
+   578→                      </div>
+   579→                    </div>
+   580→                  ))}
+   581→                </div>
+   582→              )}
+   583→            </div>
+   584→
+   585→            {/* Submit Button */}
+   586→            <Button
+   587→              className="w-full h-12 text-base font-semibold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-md"
+   588→              onClick={handleCheckCost}
+   589→              disabled={calculating}
+   590→            >
+   591→              {calculating ? (
+   592→                <>
+   593→                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+   594→                  Menghitung Ongkir...
+   595→                </>
+   596→              ) : (
+   597→                <>
+   598→                  <Search className="mr-2 h-5 w-5" />
+   599→                  Cek Ongkir Sekarang
+   600→                </>
+   601→              )}
+   602→            </Button>
+   603→          </CardContent>
+   604→        </Card>
+   605→
+   606→        {/* Results */}
+   607→        {costResult && (
+   608→          <div className="space-y-4">
+   609→            {/* Result Summary */}
+   610→            <Card className="border-emerald-200 dark:border-emerald-800 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/50 dark:to-teal-950/50">
+   611→              <CardContent className="p-4">
+   612→                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+   613→                  <div className="flex items-center gap-2 text-sm">
+   614→                    <MapPin className="h-4 w-4 text-emerald-600 shrink-0" />
+   615→                    <span className="font-medium">{costResult.origin.type} {costResult.origin.city}</span>
+   616→                    <ArrowRightLeft className="h-3.5 w-3.5 text-emerald-500" />
+   617→                    <span className="font-medium">{costResult.destination.type} {costResult.destination.city}</span>
+   618→                  </div>
+   619→                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
+   620→                    <span className="flex items-center gap-1">
+   621→                      <Weight className="h-3.5 w-3.5" />
+   622→                      {costResult.weight >= 1000 ? `${(costResult.weight / 1000).toFixed(1)} kg` : `${costResult.weight} gr`}
+   623→                    </span>
+   624→                    <span className="flex items-center gap-1">
+   625→                      <Route className="h-3.5 w-3.5" />
+   626→                      Faktor jarak: {costResult.distanceMultiplier}x
+   627→                    </span>
+   628→                  </div>
+   629→                </div>
+   630→
+   631→                {cheapestService && (
+   632→                  <div className="mt-3 pt-3 border-t border-emerald-200 dark:border-emerald-800">
+   633→                    <div className="flex items-center gap-2 text-sm">
+   634→                      <CircleDollarSign className="h-4 w-4 text-emerald-600" />
+   635→                      <span className="text-muted-foreground">Termurah:</span>
+   636→                      <span className="font-bold text-emerald-700 dark:text-emerald-300">
+   637→                        {formatRupiah(cheapestService.cost)}
+   638→                      </span>
+   639→                      <Badge variant="outline" className="text-[10px] h-5 border-emerald-300 dark:border-emerald-700">
+   640→                        {cheapestService.courierName} - {cheapestService.serviceName}
+   641→                      </Badge>
+   642→                    </div>
+   643→                  </div>
+   644→                )}
+   645→              </CardContent>
+   646→            </Card>
+   647→
+   648→            {/* Sort Toggle */}
+   649→            <div className="flex items-center justify-between">
+   650→              <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+   651→                <Truck className="h-5 w-5 text-emerald-600" />
+   652→                Hasil Pengecekan
+   653→              </h3>
+   654→              <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
+   655→                <Button
+   656→                  variant={sortBy === 'price' ? 'default' : 'ghost'}
+   657→                  size="sm"
+   658→                  className={`text-xs h-7 ${sortBy === 'price' ? 'bg-emerald-600 hover:bg-emerald-700' : ''}`}
+   659→                  onClick={() => setSortBy('price')}
+   660→                >
+   661→                  <CircleDollarSign className="h-3.5 w-3.5 mr-1" />
+   662→                  Termurah
+   663→                </Button>
+   664→                <Button
+   665→                  variant={sortBy === 'speed' ? 'default' : 'ghost'}
+   666→                  size="sm"
+   667→                  className={`text-xs h-7 ${sortBy === 'speed' ? 'bg-emerald-600 hover:bg-emerald-700' : ''}`}
+   668→                  onClick={() => setSortBy('speed')}
+   669→                >
+   670→                  <Clock className="h-3.5 w-3.5 mr-1" />
+   671→                  Tercepat
+   672→                </Button>
+   673→              </div>
+   674→            </div>
+   675→
+   676→            {/* Courier Result Cards */}
+   677→            <div className="space-y-3">
+   678→              {getSortedResults().map((result) => (
+   679→                <Card key={result.courier.code} className="overflow-hidden border-border hover:shadow-md transition-shadow">
+   680→                  <CardHeader className={`py-3 px-4 ${getCourierColor(result.courier.code)} border-b`}>
+   681→                    <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+   682→                      {getCourierIcon(result.courier.code)}
+   683→                      {result.courier.name}
+   684→                      <Badge variant="outline" className="ml-auto text-[10px] border-current/30">
+   685→                        {result.services.length} layanan
+   686→                      </Badge>
+   687→                    </CardTitle>
+   688→                  </CardHeader>
+   689→                  <CardContent className="p-0">
+   690→                    <div className="divide-y divide-border">
+   691→                      {result.services.map((service, idx) => {
+   692→                        const isCheapest = cheapestService &&
+   693→                          service.cost === cheapestService.cost &&
+   694→                          result.courier.code === cheapestService.courierCode
+   695→
+   696→                        return (
+   697→                          <div
+   698→                            key={service.serviceCode}
+   699→                            className={`flex items-center justify-between px-4 py-3 text-sm transition-colors hover:bg-accent/50 ${
+   700→                              isCheapest ? 'bg-emerald-50/50 dark:bg-emerald-950/30' : ''
+   701→                            }`}
+   702→                          >
+   703→                            <div className="flex items-center gap-3 min-w-0 flex-1">
+   704→                              <div className="min-w-0">
+   705→                                <div className="flex items-center gap-2">
+   706→                                  <span className="font-medium">{service.serviceName}</span>
+   707→                                  {isCheapest && (
+   708→                                    <Badge className="bg-emerald-600 text-[10px] h-5 px-1.5">
+   709→                                      Termurah
+   710→                                    </Badge>
+   711→                                  )}
+   712→                                  {idx === 0 && sortBy === 'speed' && (
+   713→                                    <Badge className="bg-teal-600 text-[10px] h-5 px-1.5">
+   714→                                      Tercepat
+   715→                                    </Badge>
+   716→                                  )}
+   717→                                </div>
+   718→                                <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
+   719→                                  {service.description && <span>{service.description}</span>}
+   720→                                  {service.estimated && (
+   721→                                    <span className="flex items-center gap-1">
+   722→                                      <Clock className="h-3 w-3" />
+   723→                                      {service.estimated}
+   724→                                    </span>
+   725→                                  )}
+   726→                                </div>
+   727→                              </div>
+   728→                            </div>
+   729→                            <div className="text-right shrink-0 ml-4">
+   730→                              <div className={`font-bold ${isCheapest ? 'text-emerald-700 dark:text-emerald-300' : 'text-foreground'}`}>
+   731→                                {formatRupiah(service.cost)}
+   732→                              </div>
+   733→                            </div>
+   734→                          </div>
+   735→                        )
+   736→                      })}
+   737→                    </div>
+   738→                  </CardContent>
+   739→                </Card>
+   740→              ))}
+   741→            </div>
+   742→
+   743→            {/* Disclaimer */}
+   744→            <div className="flex items-start gap-2 text-xs text-muted-foreground bg-muted/50 rounded-lg p-3">
+   745→              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+   746→              <p>
+   747→                Estimasi harga yang ditampilkan bersifat perkiraan dan dapat berbeda dari tarif aktual.
+   748→                Harga dihitung berdasarkan berat, jarak (pulau), dan tarif dasar masing-masing kurir.
+   749→                Untuk harga pasti, silakan hubungi kurir terkait atau cek langsung di website resmi mereka.
+   750→              </p>
+   751→            </div>
+   752→          </div>
+   753→        )}
+   754→      </main>
+   755→
+   756→      {/* Footer */}
+   757→      <footer className="border-t border-border bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm mt-auto">
+   758→        <div className="max-w-5xl mx-auto px-4 py-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-muted-foreground">
+   759→          <span>CekOngkir - Cek ongkos kirim semua ekspedisi Indonesia</span>
+   760→          <span>Data harga bersifat estimasi</span>
+   761→        </div>
+   762→      </footer>
+   763→    </div>
+   764→  )
+   765→}
+   766→
