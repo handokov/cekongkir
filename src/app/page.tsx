@@ -63,6 +63,7 @@ interface CostService {
   description: string | null
   estimated: string | null
   cost: number
+  isRealTime?: boolean // true = from RajaOngkir API, false = estimated
 }
 
 interface CostResult {
@@ -76,6 +77,7 @@ interface CostResponse {
   weight: number
   distanceMultiplier: number
   results: CostResult[]
+  disclaimer?: string
 }
 
 // City Search Dropdown Component
@@ -702,8 +704,17 @@ export default function Home() {
                           >
                             <div className="flex items-center gap-3 min-w-0 flex-1">
                               <div className="min-w-0">
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
                                   <span className="font-medium">{service.serviceName}</span>
+                                  {service.isRealTime ? (
+                                    <Badge className="bg-blue-600 text-[10px] h-5 px-1.5">
+                                      Real-time
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="outline" className="text-[10px] h-5 px-1.5 text-amber-600 border-amber-300">
+                                      Estimasi
+                                    </Badge>
+                                  )}
                                   {isCheapest && (
                                     <Badge className="bg-emerald-600 text-[10px] h-5 px-1.5">
                                       Termurah
@@ -741,14 +752,19 @@ export default function Home() {
             </div>
 
             {/* Disclaimer */}
-            <div className="flex items-start gap-2 text-xs text-muted-foreground bg-muted/50 rounded-lg p-3">
-              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-              <p>
-                Estimasi harga yang ditampilkan bersifat perkiraan dan dapat berbeda dari tarif aktual.
-                Harga dihitung berdasarkan berat, jarak (pulau), dan tarif dasar masing-masing kurir.
-                Untuk harga pasti, silakan hubungi kurir terkait atau cek langsung di website resmi mereka.
-              </p>
-            </div>
+            {costData?.disclaimer ? (
+              <div className="flex items-start gap-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded-lg p-3">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                <p>{costData.disclaimer}</p>
+              </div>
+            ) : (
+              <div className="flex items-start gap-2 text-xs text-muted-foreground bg-muted/50 rounded-lg p-3">
+                <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-green-500" />
+                <p>
+                  Semua harga ditampilkan real-time dari RajaOngkir API.
+                </p>
+              </div>
+            )}
           </div>
         )}
       </main>

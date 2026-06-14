@@ -16,14 +16,15 @@ model Province {
 }
 
 model City {
-  id         String   @id @default(cuid())
-  name       String
-  type       String   @default("Kota")
-  postalCode String?
-  provinceId String
-  province   Province @relation(fields: [provinceId], references: [id])
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id           String   @id @default(cuid())
+  name         String
+  type         String   @default("Kota")
+  postalCode   String?
+  rajaOngkirId Int?     // RajaOngkir city ID for real-time pricing
+  provinceId   String
+  province     Province @relation(fields: [provinceId], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@unique([name, provinceId])
 }
