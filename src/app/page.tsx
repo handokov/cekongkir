@@ -63,7 +63,8 @@ interface CostService {
   description: string | null
   estimated: string | null
   cost: number
-  isRealTime?: boolean // true = from RajaOngkir API, false = estimated
+  isRealTime?: boolean // true = from real API (RajaOngkir/KiriminAja), false = estimated
+  source?: string // 'rajaongkir' | 'kiriminaja' | 'estimation'
 }
 
 interface CostResult {
@@ -77,6 +78,7 @@ interface CostResponse {
   weight: number
   distanceMultiplier: number
   results: CostResult[]
+  apiSources?: string[] // Which APIs are providing real-time data
   disclaimer?: string
 }
 
@@ -707,8 +709,10 @@ export default function Home() {
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="font-medium">{service.serviceName}</span>
                                   {service.isRealTime ? (
-                                    <Badge className="bg-blue-600 text-[10px] h-5 px-1.5">
-                                      Real-time
+                                    <Badge className={`text-[10px] h-5 px-1.5 ${
+                                      service.source === 'kiriminaja' ? 'bg-purple-600' : 'bg-blue-600'
+                                    }`}>
+                                      {service.source === 'kiriminaja' ? 'KiriminAja' : 'Real-time'}
                                     </Badge>
                                   ) : (
                                     <Badge variant="outline" className="text-[10px] h-5 px-1.5 text-amber-600 border-amber-300">
@@ -751,17 +755,25 @@ export default function Home() {
               ))}
             </div>
 
-            {/* Disclaimer */}
+            {/* API Sources & Disclaimer */}
+            {costData?.apiSources && costData.apiSources.length > 0 && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground bg-blue-50 dark:bg-blue-950/30 rounded-lg p-3">
+                <Zap className="h-4 w-4 shrink-0 text-blue-500" />
+                <p>
+                  Data real-time dari: {costData.apiSources.join(', ')}
+                </p>
+              </div>
+            )}
             {costData?.disclaimer ? (
               <div className="flex items-start gap-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded-lg p-3">
                 <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                 <p>{costData.disclaimer}</p>
               </div>
-            ) : (
+            ) : costData?.apiSources && costData.apiSources.length > 0 ? null : (
               <div className="flex items-start gap-2 text-xs text-muted-foreground bg-muted/50 rounded-lg p-3">
-                <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-green-500" />
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-amber-500" />
                 <p>
-                  Semua harga ditampilkan real-time dari RajaOngkir API.
+                  Harga bersifat estimasi. Hubungi kurir untuk harga pasti.
                 </p>
               </div>
             )}

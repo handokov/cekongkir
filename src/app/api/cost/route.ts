@@ -1,5 +1,11 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
+import {
+  fetchKiriminAjaPrice,
+  getKiriminAjaSupportedCouriers,
+  getKiriminAjaUnsupportedCouriers,
+  isKiriminAjaConfigured,
+} from '@/lib/kiriminaja'
 
 // RajaOngkir integration for real-time pricing (JNE, TIKI, POS)
 const RAJAONGKIR_API_KEY = process.env.RAJAONGKIR_API_KEY || ''
@@ -24,7 +30,8 @@ interface CostResult {
     description: string | null
     estimated: string | null
     cost: number
-    isRealTime: boolean // true = from RajaOngkir, false = estimated
+    isRealTime: boolean // true = from real API (RajaOngkir/KiriminAja), false = estimated
+    source: string // 'rajaongkir' | 'kiriminaja' | 'estimation'
   }>
 }
 
@@ -158,6 +165,53 @@ async function fetchRajaOngkirCosts(
   }
 }
 
+/**
+ * Fetch real-time shipping costs from KiriminAja API
+ * Uses district/kecamatan IDs
+ */
+async function fetchKiriminAjaCosts(
+  originDistrictId: number,
+  destDistrictId: number,
+  weight: number,
+  courierCodes: string[]
+): Promise<CostResult[] | null> {
+  if (!isKiriminAjaConfigured()) {
+    return null
+  }
+
+  try {
+    const kaResults = await fetchKiriminAjaPrice(
+      originDistrictId,
+      destDistrictId,
+      weight,
+      courierCodes
+    )
+
+    if (!kaResults || kaResults.length === 0) {
+      return null
+    }
+
+    // Convert KiriminAja results to our CostResult format
+    const results: CostResult[] = kaResults.map(kaResult => ({
+      courier: { code: kaResult.courier_code, name: kaResult.courier },
+      services: (kaResult.services || []).map(svc => ({
+        serviceCode: svc.service_code || svc.service,
+        serviceName: svc.description || svc.service,
+        description: svc.description || null,
+        estimated: svc.etd ? `${svc.etd}` : null,
+        cost: svc.price || 0,
+        isRealTime: true,
+        source: 'kiriminaja' as const,
+      })),
+    }))
+
+    return results
+  } catch (error) {
+    console.error('[KiriminAja] Error fetching costs:', error)
+    return null
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const body: CostRequest = await request.json()
@@ -195,19 +249,69 @@ export async function POST(request: Request) {
       originCity.name, destCity.name
     )
 
-    // Separate couriers: RajaOngkir-supported vs estimation-only
-    const roCouriers = courierCodes.filter(c => RAJAONGKIR_COURIERS.includes(c))
-    const estCouriers = courierCodes.filter(c => !RAJAONGKIR_COURIERS.includes(c))
-
     const results: CostResult[] = []
+    const processedCouriers = new Set<string>() // Track couriers that got real-time results
+    const estimationNeeded: string[] = [] // Couriers that need estimation fallback
 
-    // === Fetch real-time prices from RajaOngkir for JNE/TIKI/POS ===
+    // === STEP 1: Fetch from KiriminAja (18+ couriers) ===
+    const kaSupportedCouriers = getKiriminAjaSupportedCouriers(courierCodes)
+    const hasOriginKaId = originCity.kiriminAjaDistrictId != null
+    const hasDestKaId = destCity.kiriminAjaDistrictId != null
+
+    if (kaSupportedCouriers.length > 0 && isKiriminAjaConfigured() && hasOriginKaId && hasDestKaId) {
+      console.log(`[KiriminAja] Fetching prices for ${kaSupportedCouriers.length} couriers`)
+      const kaResults = await fetchKiriminAjaCosts(
+        originCity.kiriminAjaDistrictId!,
+        destCity.kiriminAjaDistrictId!,
+        weight,
+        kaSupportedCouriers
+      )
+
+      if (kaResults && kaResults.length > 0) {
+        for (const result of kaResults) {
+          if (result.services.length > 0) {
+            results.push(result)
+            processedCouriers.add(result.courier.code)
+          }
+        }
+      }
+
+      // Couriers that KiriminAja supports but didn't return results for
+      for (const code of kaSupportedCouriers) {
+        if (!processedCouriers.has(code)) {
+          estimationNeeded.push(code)
+        }
+      }
+    } else {
+      // KiriminAja not configured or no district ID mapping
+      if (kaSupportedCouriers.length > 0) {
+        if (!isKiriminAjaConfigured()) {
+          console.warn('[KiriminAja] API key not configured')
+        } else {
+          console.warn('[KiriminAja] No district ID mapping available for cities')
+        }
+      }
+      // Check which KiriminAja couriers also supported by RajaOngkir
+      // Those not supported by RajaOngkir go to estimation
+      for (const code of kaSupportedCouriers) {
+        if (!RAJAONGKIR_COURIERS.includes(code)) {
+          estimationNeeded.push(code)
+        }
+        // RajaOngkir-supported couriers will be handled in step 2
+      }
+    }
+
+    // === STEP 2: Fetch from RajaOngkir (JNE, TIKI, POS) ===
+    // Only fetch from RajaOngkir if not already covered by KiriminAja
+    const roCouriers = courierCodes.filter(c =>
+      RAJAONGKIR_COURIERS.includes(c) && !processedCouriers.has(c)
+    )
+
     if (roCouriers.length > 0 && RAJAONGKIR_API_KEY) {
       const hasOriginRoId = originCity.rajaOngkirId != null
       const hasDestRoId = destCity.rajaOngkirId != null
 
       if (hasOriginRoId && hasDestRoId) {
-        // Fetch all RajaOngkir couriers in parallel
         const roPromises = roCouriers.map(async (courierCode) => {
           const roResult = await fetchRajaOngkirCosts(
             originCity.rajaOngkirId!,
@@ -226,38 +330,44 @@ export async function POST(request: Request) {
                 estimated: cost.cost[0]?.etd ? `${cost.cost[0].etd} hari` : null,
                 cost: cost.cost[0]?.value || 0,
                 isRealTime: true,
+                source: 'rajaongkir' as const,
               })),
             } as CostResult
           }
-
-          // Fallback to estimation if RajaOngkir didn't return results
           return null
         })
 
         const roResults = await Promise.all(roPromises)
-        
+
         for (let i = 0; i < roResults.length; i++) {
           if (roResults[i]) {
             results.push(roResults[i]!)
+            processedCouriers.add(roCouriers[i])
           } else {
-            // Fallback: use estimation for this courier
-            estCouriers.push(roCouriers[i])
+            estimationNeeded.push(roCouriers[i])
           }
         }
       } else {
-        // No RajaOngkir ID mapping, fall back to estimation for all RO couriers
         console.warn('[RajaOngkir] No city ID mapping available, using estimation for:', roCouriers)
-        estCouriers.push(...roCouriers)
+        estimationNeeded.push(...roCouriers)
       }
-    } else {
-      // No API key or no RO couriers, all go to estimation
-      estCouriers.push(...roCouriers)
+    } else if (roCouriers.length > 0) {
+      // No API key
+      estimationNeeded.push(...roCouriers)
     }
 
-    // === Calculate estimated costs for non-RajaOngkir couriers ===
-    if (estCouriers.length > 0) {
+    // === STEP 3: Add remaining couriers not handled by any API ===
+    for (const code of courierCodes) {
+      if (!processedCouriers.has(code) && !estimationNeeded.includes(code)) {
+        estimationNeeded.push(code)
+      }
+    }
+
+    // === STEP 4: Calculate estimated costs for remaining couriers ===
+    if (estimationNeeded.length > 0) {
+      const uniqueEstNeeded = [...new Set(estimationNeeded)]
       const couriers = await db.courier.findMany({
-        where: { code: { in: estCouriers } },
+        where: { code: { in: uniqueEstNeeded } },
         include: { services: { orderBy: { basePrice: 'asc' } } },
       })
 
@@ -271,6 +381,7 @@ export async function POST(request: Request) {
             estimated: service.estimated,
             cost: calculateCost(service.basePrice, service.pricePerKg, weight, distanceMultiplier),
             isRealTime: false,
+            source: 'estimation' as const,
           })),
         })
       }
@@ -283,6 +394,24 @@ export async function POST(request: Request) {
       return minA - minB
     })
 
+    // Build info about which APIs are configured
+    const apiSources: string[] = []
+    if (RAJAONGKIR_API_KEY) apiSources.push('RajaOngkir')
+    if (isKiriminAjaConfigured()) apiSources.push('KiriminAja')
+
+    // Build disclaimer
+    const hasEstimation = results.some(r => r.services.some(s => !s.isRealTime))
+    const hasRealTime = results.some(r => r.services.some(s => s.isRealTime))
+
+    let disclaimer: string | undefined
+    if (hasEstimation) {
+      if (hasRealTime) {
+        disclaimer = 'Harga bertanda "estimasi" bukan harga resmi kurir. Harga bertanda "Real-time" berasal dari API resmi (RajaOngkir/KiriminAja). Untuk harga pasti, hubungi kurir terkait.'
+      } else {
+        disclaimer = 'Harga yang ditampilkan adalah estimasi dan bukan harga resmi kurir. Untuk harga pasti, hubungi kurir terkait.'
+      }
+    }
+
     return NextResponse.json({
       status: 'ok',
       data: {
@@ -291,9 +420,8 @@ export async function POST(request: Request) {
         weight,
         distanceMultiplier: Math.round(distanceMultiplier * 100) / 100,
         results,
-        disclaimer: results.some(r => r.services.some(s => !s.isRealTime))
-          ? 'Harga bertanda "estimasi" bukan harga resmi kurir. Untuk harga pasti, hubungi kurir terkait.'
-          : undefined,
+        apiSources: apiSources.length > 0 ? apiSources : undefined,
+        disclaimer,
       }
     })
   } catch (error) {

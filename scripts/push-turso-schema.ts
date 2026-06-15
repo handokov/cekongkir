@@ -52,6 +52,13 @@ async function pushCekOngkirSchema() {
     } else {
       console.log('ℹ️ rajaOngkirId column already exists')
     }
+
+    if (!columnNames.includes('kiriminAjaDistrictId')) {
+      await turso.execute('ALTER TABLE City ADD COLUMN kiriminAjaDistrictId INTEGER')
+      console.log('✅ Added kiriminAjaDistrictId column to City table')
+    } else {
+      console.log('ℹ️ kiriminAjaDistrictId column already exists')
+    }
   } catch (e) {
     console.log('⚠️ Column migration warning:', e)
   }
